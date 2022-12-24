@@ -1,6 +1,6 @@
 import { Types } from 'mongoose';
 
-export class PaymentDto {
+export class CreatePayment {
   escortId: Types.ObjectId;
   customerId: Types.ObjectId;
   serviceId: Types.ObjectId;
