@@ -35,8 +35,9 @@ export class PaymentController {
     const now = new Date();
     const key = now.toShortDateString();
     const releases = await this.redisService.getHash(key);
+    const noKeys = !Object.keys(releases).length;
 
-    if (!Object.keys(releases).length) {
+    if (noKeys) {
       this.logger.log('No payments to release');
       return;
     }

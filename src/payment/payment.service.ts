@@ -3,11 +3,12 @@ import { Types } from 'mongoose';
 import { ClientKafka } from '@nestjs/microservices';
 import { ServiceRepository } from '../service/service.repository';
 import { PaymentRepository } from './payment.repository';
-import { PaymentDto } from './dto/payment.dto';
+import { CreatePayment } from './dto/payment.dto';
 import { PaymentDetail } from './schemas/payment-detail.schema';
 import { ServiceStatus } from '../enums/service.enum';
 import { UserType } from '../enums/user.enum';
 import { KafkaTopic } from '../config/kafka.config';
+import { ServiceDocument } from '../service/schemas/service.schema';
 
 @Injectable()
 export class PaymentService {
@@ -22,28 +23,32 @@ export class PaymentService {
 
   private readonly logger = new Logger(PaymentService.name);
 
+  private invalidService(serviceDocument: ServiceDocument): boolean {
+    return !serviceDocument || serviceDocument.status != ServiceStatus.Started;
+  }
+
+  private findCardId(paymentDetails: PaymentDetail[]): Types.ObjectId | null {
+    return paymentDetails
+      ?.filter((detail: PaymentDetail) => detail.cardId)
+      ?.pop()
+      ?.cardId;
+  }
+
   async releasePayment(serviceId: string, userType: string): Promise<void> {
-    const serviceDocument = await this.serviceRepository.getOneAndPopulate(
+    const serviceDocument = await this.serviceRepository.populateOne(
       { _id: serviceId },
       { path: 'paymentDetails', populate: { path: 'paymentMethodId' } },
     )
 
-    if (!serviceDocument || serviceDocument.status != ServiceStatus.Started) {
+    if (this.invalidService(serviceDocument)) {
       this.logger.warn(
-        `Service ID: ${serviceId} does not exist or has an invalid status: ${serviceDocument.status}`
+        `Service ID: ${serviceId} does not exist or has an invalid status`
       );
       return;
     }
 
     const paymentDetails = serviceDocument.paymentDetails as PaymentDetail[];
-    let cardId = null;
-
-    paymentDetails.forEach((detail: PaymentDetail) => {
-      if (detail.cardId) {
-        cardId = detail.cardId;
-        return;
-      }
-    });
+    const cardId = this.findCardId(paymentDetails);
 
     if (!cardId) {
       this.logger.log(`The service ${serviceId} does not have a card payment method`);
@@ -57,13 +62,13 @@ export class PaymentService {
       return;
     }
 
-    const payment: PaymentDto = {
-      escortId: new Types.ObjectId(serviceDocument.escortId),
-      customerId: new Types.ObjectId(serviceDocument.customerId),
-      serviceId: new Types.ObjectId(serviceDocument._id),
+    const payment: CreatePayment = {
+      escortId: serviceDocument.escortId,
+      customerId: serviceDocument.customerId,
+      serviceId: serviceDocument._id,
       cardId,
     };
-    
+
     serviceDocument.status = ServiceStatus.Completed;
 
     await Promise.all([

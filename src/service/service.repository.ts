@@ -8,7 +8,7 @@ export class ServiceRepository {
   @InjectModel(Service.name)
   private readonly serviceModel: Model<ServiceDocument>;
 
-  async getOneAndPopulate(
+  async populateOne(
     filter?: FilterQuery<Service>,
     ...poulateFilter: any
   ): Promise<ServiceDocument> {
